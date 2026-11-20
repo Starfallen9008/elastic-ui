@@ -1,0 +1,112 @@
+// Browser regression for a local preview only. Replaces Wails bridge methods
+// with deterministic fixtures; never connects to a real Agent or Kibana.
+(async () => {
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const assert = (value, message) => { if (!value) throw new Error(message); };
+  const until = async predicate => {
+    for (let i = 0; i < 120; i++) { if (predicate()) return; await pause(25); }
+    throw new Error('Timed out waiting for UI');
+  };
+  const button = text => [...document.querySelectorAll('button')].find(element => element.textContent.trim() === text);
+  const input = (selector, value) => {
+    const element = document.querySelector(selector);
+    element.value = value;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  await until(() => document.querySelector('.protection-trigger'));
+  await pause(500);
+  if (document.documentElement.dataset.theme !== 'light') document.querySelector('[aria-label="切换主题"]').click();
+  const trigger = () => document.querySelector('.protection-trigger');
+  const open = async () => { trigger().click(); await until(() => document.querySelector('#protection-popover')?.matches(':popover-open')); await pause(220); };
+  await open();
+  let panel = document.querySelector('#protection-popover');
+  const a = trigger().getBoundingClientRect(), p = panel.getBoundingClientRect();
+  assert(p.x >= 0 && p.right <= innerWidth && p.y >= 0 && p.bottom <= innerHeight, 'Popover outside viewport');
+  assert(p.bottom <= a.top && Math.abs(p.bottom - a.top) <= 10, 'Popover is not anchored above trigger');
+  assert(!document.querySelector('.modal-backdrop'), 'Protection used modal backdrop');
+  assert(trigger().getAttribute('aria-expanded') === 'true', 'Expanded semantics missing');
+  panel.querySelector('.prot-row').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  await pause(25);
+  assert(document.querySelector('#protection-popover'), 'Internal interaction dismissed popover');
+  trigger().click(); await pause(25);
+  assert(!document.querySelector('#protection-popover'), 'Trigger toggle failed');
+  await open();
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await pause(25);
+  assert(!document.querySelector('#protection-popover') && document.activeElement === trigger(), 'Escape/focus restoration failed');
+  await open();
+  document.querySelector('.hero-meta').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); await pause(25);
+  assert(!document.querySelector('#protection-popover'), 'Outside dismissal failed');
+  await open();
+  window.dispatchEvent(new Event('resize')); await pause(25);
+  panel = document.querySelector('#protection-popover');
+  assert(panel.getBoundingClientRect().bottom <= trigger().getBoundingClientRect().top, 'Resize reposition failed');
+
+  const bridge = window.go.main.App;
+  const local = value => ({ id: value, itemId: value, name: value, value, kind: '路径', scope: '本机策略', os: 'windows', updatedAt: '2026-11-19T10:00:00Z', readOnly: false, matchKey: `path:${value.toLowerCase()}` });
+  let rows = [local('C:\\Existing.exe'), { ...local('C:\\Global.exe'), scope: '全局', readOnly: true }, local('C:\\CannotDelete.exe')];
+  const calls = []; let concurrent = 0, maximum = 0;
+  bridge.GetTrustItems = async () => rows.map(row => ({ ...row }));
+  bridge.CreateTrust = async request => {
+    concurrent++; maximum = Math.max(maximum, concurrent); calls.push({ action: 'add', ...request });
+    await pause(50); concurrent--;
+    if (request.value.includes('Failure')) throw new Error('403: fixture permission denied');
+    rows.push(local(request.value));
+  };
+  bridge.DeleteTrust = async id => {
+    concurrent++; maximum = Math.max(maximum, concurrent); calls.push({ action: 'delete', id });
+    await pause(50); concurrent--;
+    if (id.includes('CannotDelete')) throw new Error('409: fixture conflict');
+    rows = rows.filter(row => row.id !== id);
+  };
+   document.querySelector('.position-settings').click();
+   await until(() => button('信任区'));
+   button('信任区').click();
+  await until(() => document.querySelector('.trust-editor'));
+  assert(!document.querySelector('#protection-popover'), 'Navigation left popover open');
+  await until(() => document.querySelectorAll('tbody tr').length === 3);
+  button('批量添加').click(); await pause(25);
+  input('#batch-values', 'C:\\New.exe\nC:\\new.exe\nC:\\Existing.exe\nrelative\nC:\\Failure.exe'); await pause(25);
+  assert(document.querySelector('.batch-summary').textContent.includes('无效 1'), 'Invalid count missing');
+  assert(button('检查并确认添加').disabled, 'Invalid batch submission enabled');
+  input('#batch-values', 'C:\\New.exe\nC:\\new.exe\nC:\\Existing.exe\nC:\\Failure.exe'); await pause(25);
+  button('检查并确认添加').click(); await until(() => document.querySelector('.confirm-panel'));
+  assert(!calls.length, 'Mutated before confirmation');
+  button('取消').click(); await pause(25);
+  assert(!calls.length, 'Cancel mutated backend');
+  button('检查并确认添加').click(); await until(() => document.querySelector('.confirm-panel'));
+  const confirmAdd = button('确认添加'); confirmAdd.click(); confirmAdd.click();
+  await until(() => document.querySelector('.operation-result'));
+  assert(calls.filter(call => call.action === 'add').length === 2, 'Duplicate or double submission created extra requests');
+  assert(maximum === 1, 'Unbounded request concurrency');
+  assert(document.querySelector('.operation-result').textContent.includes('成功添加 1 条'), 'Partial success missing');
+  assert(document.querySelector('.operation-result').textContent.includes('重复跳过 2 条'), 'Skipped count missing');
+  assert(document.querySelector('.operation-result').textContent.includes('403'), 'Per-item error missing');
+  assert(button('复制失败列表'), 'Copy failures action missing');
+  await until(() => !button('刷新').disabled);
+  const global = [...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes('Global'));
+  assert(global.querySelector('input').disabled, 'Global rule is selectable');
+  const selectAll = document.querySelector('thead input'); selectAll.click(); await pause(25);
+  assert(document.querySelector('.selection-toolbar').textContent.includes('已选 3 条'), 'Select all scope/count incorrect');
+  selectAll.click(); await pause(25);
+  assert(button('批量删除').disabled, 'Deselect all failed');
+  selectAll.click(); await pause(25);
+  button('批量删除').click(); await until(() => document.querySelector('.confirm-panel'));
+  assert(document.querySelector('#trust-confirm-title').textContent.includes('3 条'), 'Delete confirmation count missing');
+  button('确认删除').click(); await until(() => document.querySelector('.operation-result')?.textContent.includes('成功删除'));
+  await until(() => !button('刷新').disabled);
+  assert(document.querySelector('.operation-result').textContent.includes('成功删除 2 条'), 'Delete partial success missing');
+  assert(document.querySelector('.operation-result').textContent.includes('409'), 'Delete failure detail missing');
+  assert(!calls.some(call => call.action === 'delete' && call.id.includes('Global')), 'Attempted global delete');
+  assert(document.querySelectorAll('tbody tr').length === 2, 'List not updated after partial delete');
+  button('单条添加').click(); await pause(25);
+  input('#trust-value', 'C:\\Single.exe'); await pause(25); button('添加').click();
+  await until(() => [...document.querySelectorAll('tbody tr')].some(row => row.textContent.includes('Single.exe')));
+  await until(() => !button('刷新').disabled);
+  bridge.GetTrustItems = async () => { throw new Error('fixture offline'); };
+  button('刷新').click(); await until(() => document.querySelector('.error')?.textContent.includes('fixture offline'));
+  assert(document.querySelectorAll('tbody tr').length === 3, 'Refresh failure discarded prior rows');
+  bridge.GetTrustItems = async () => rows.map(row => ({ ...row }));
+  button('刷新').click(); await until(() => !document.querySelector('.error'));
+  return { passed: true, popover: { x: p.x, y: p.y, width: p.width, height: p.height }, maximumConcurrency: maximum, calls, theme: document.documentElement.dataset.theme, font: getComputedStyle(document.querySelector('.trust-editor')).fontFamily };
+})()

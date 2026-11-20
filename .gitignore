@@ -1,0 +1,16 @@
+build/bin/
+build/windows/installer/
+frontend/node_modules/
+frontend/dist/
+dev/local.json
+*.log
+.DS_Store
+packaging/MicrosoftEdgeWebview2Setup.exe
+build/*.exe
+*.syso
+*.bak
+*.zip
+docs/*
+!docs/releasing.md
+dev/*
+!dev/scan-target.txt
