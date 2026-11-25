@@ -1,6 +1,6 @@
 # 发布
 
-发布源固定为 `Dreamend1ng/elastic-ui` 的 GitHub Releases。客户端只检查正式版，不安装草稿或预发布版。
+发布源固定为 `Starfallen9008/elastic-ui` 的 GitHub Releases。客户端只检查正式版，不安装草稿或预发布版。
 
 1. 同时修改 `internal/update/update.go`、`wails.json` 和 `packaging/build-release.ps1` 中的版本号。
 2. 运行 `go test ./...`、前端检查与测试。

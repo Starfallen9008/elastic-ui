@@ -17,8 +17,8 @@ import (
 	"time"
 )
 
-const Version = "1.0.0"
-const Repository = "Dreamend1ng/elastic-ui"
+const Version = "1.0.1"
+const Repository = "Starfallen9008/elastic-ui"
 const InstallerName = "elastic-ui-windows-amd64-setup.exe"
 
 type Release struct {

@@ -3,6 +3,7 @@
 package tray
 
 import (
+	"bytes"
 	_ "embed"
 	"os"
 	"path/filepath"
@@ -350,7 +351,7 @@ func ensureIconFile() string {
 	dir = filepath.Join(dir, "ElasticDefendConsole")
 	_ = os.MkdirAll(dir, 0o755)
 	path := filepath.Join(dir, "tray.ico")
-	if info, err := os.Stat(path); err == nil && info.Size() == int64(len(iconData)) {
+	if data, err := os.ReadFile(path); err == nil && bytes.Equal(data, iconData) {
 		return path
 	}
 	if err := os.WriteFile(path, iconData, 0o644); err != nil {

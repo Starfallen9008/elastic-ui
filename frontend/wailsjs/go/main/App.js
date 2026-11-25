@@ -178,6 +178,10 @@ export function ShellIntegrationEnabled() {
   return window['go']['main']['App']['ShellIntegrationEnabled']();
 }
 
+export function ShowWindow() {
+  return window['go']['main']['App']['ShowWindow']();
+}
+
 export function StartScan(arg1) {
   return window['go']['main']['App']['StartScan'](arg1);
 }

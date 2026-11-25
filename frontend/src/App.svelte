@@ -36,6 +36,7 @@
   let toastIsError = false;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  let connecting = false;
   let direction = 1;
   let reduced = false;
   let backLeaving = false;
@@ -157,9 +158,14 @@
       return;
     }
 
-    await refresh();
+    // Show the shell immediately. The first status request may wait on an
+    // unavailable Kibana/Elasticsearch endpoint for up to 30 seconds.
     loading = false;
     if (!settings.policySetupComplete) page = 'policy-setup';
+    connecting = true;
+    refresh().finally(() => {
+      connecting = false;
+    });
   });
 
   onDestroy(() => {
@@ -237,7 +243,7 @@
            {#if page === 'policy-setup'}
              <IndependentPolicy host={settings?.profile.hostName || ''} onboarding {isolated} on:changed={handlePolicyChanged} on:done={handlePolicyDone} />
            {:else if page === 'status'}
-            <Status {status} statusError={error} items={nav} on:navigate={(e) => navigate(e.detail)} on:toast={(e) => showToast(e.detail.message, e.detail.error)} />
+            <Status {status} statusError={error} {connecting} items={nav} on:navigate={(e) => navigate(e.detail)} on:toast={(e) => showToast(e.detail.message, e.detail.error)} />
           {:else if page === 'threats'}
              <Threats {isolated} initialAlertID={notificationThreatID} on:opened={() => notificationThreatID = ''} on:toast={(e) => showToast(e.detail.message, e.detail.error)} />
           {:else if page === 'events'}

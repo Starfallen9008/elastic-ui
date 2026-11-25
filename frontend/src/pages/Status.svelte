@@ -8,6 +8,7 @@
 
   export let status: service.StatusView | null;
   export let statusError = '';
+  export let connecting = false;
   export let items: { id: string; label: string }[] = [];
 
   const dispatch = createEventDispatcher();
@@ -15,6 +16,7 @@
   let showProtection = false;
   let protectionTrigger: HTMLButtonElement;
   let dismissedAlert = sessionStorage.getItem('ed-alert-dismissed') || '';
+  let alertOpen = false;
   let entered = false;
   let leaving = false;
   let navigationTimer: ReturnType<typeof setTimeout>;
@@ -55,6 +57,7 @@
     : [];
   $: blocking = modes.length === 4 && modes.every((mode) => mode === '阻止');
   $: allDisabled = modes.length === 4 && modes.every((mode) => mode === '关闭');
+  $: detectOnly = !!status?.detectOnly;
   $: reachable =
     !!status && !connectionError && status.connected && status.agentStatus === 'online' && status.endpointStatus === 'enrolled';
   $: runtimeDown = runtimeState === 'FAILED' || runtimeState === 'STOPPED' || runtimeState === 'UNAVAILABLE';
@@ -62,20 +65,40 @@
   $: levelLabel = connectionError || protectionError ? '状态未知' : level === 'green' ? '保护中' : level === 'yellow' ? '降级' : '不可用';
   $: description = level === 'green'
     ? '四项防护均为阻止模式'
-    : connectionError ? '管理连接失败，防护状态无法确认' : protectionError ? '无法读取防护策略' : level === 'yellow' ? '部分防护或运行状态需要检查' : '请检查 Agent 与防护连接';
+    : connectionError ? '管理连接失败，防护状态无法确认'
+    : protectionError ? '无法读取防护策略'
+    : runtimeIssue ? (detectOnly ? '仅检测模式，运行状态需要检查' : '运行状态需要检查')
+    : detectOnly ? '四项防护均为仅检测模式'
+    : allDisabled ? '四项防护均已关闭'
+    : level === 'yellow' ? '部分防护或运行状态需要检查'
+    : '请检查 Agent 与防护连接';
   $: alertKey = status
     ? `${!!connectionError}|${!!protectionError}|${runtimeState}|${status.agentStatus}|${status.endpointStatus}|${status.protection?.malware}|${status.protection?.ransomware}|${status.protection?.memory}|${status.protection?.behavior}`
     : '';
-  $: showAlert = !!status && level !== 'green' && dismissedAlert !== alertKey;
+  // Detect-only and other healthy policy combinations are deliberate settings,
+  // not incidents. Auto-open only for failures or modules that are switched off.
+  $: hasDisabledModule = modes.length === 4 && modes.some((mode) => mode === '关闭') && !allDisabled;
+  $: runtimeIssue = runtimeState !== 'HEALTHY';
+  $: actionable = level === 'red' || (level === 'yellow' && (hasDisabledModule || runtimeIssue));
+  $: autoAlert = !!status && actionable && dismissedAlert !== alertKey;
+  $: showAlert = !!status && level !== 'green' && (autoAlert || alertOpen);
+  $: if (level === 'green' && alertOpen) alertOpen = false;
+  $: modalTitle = connectionError ? '管理连接失败'
+    : protectionError ? '防护状态无法读取'
+    : level === 'red' ? '防护不可用'
+    : runtimeIssue ? '运行状态异常'
+    : hasDisabledModule ? '防护模块已关闭'
+    : detectOnly ? '仅检测模式'
+    : '防护降级';
 
   function dismissAlert() {
+    alertOpen = false;
     dismissedAlert = alertKey;
     sessionStorage.setItem('ed-alert-dismissed', alertKey);
   }
 
   function openAlert() {
-    dismissedAlert = '';
-    sessionStorage.removeItem('ed-alert-dismissed');
+    alertOpen = true;
   }
 
   function copyRaw() {
@@ -116,7 +139,7 @@
     </div>
 
     {#if level !== 'green'}
-      <button class="alert-link" on:click={openAlert}>查看告警详情</button>
+      <button class="alert-link" on:click={openAlert}>{level === 'red' ? '查看告警详情' : '查看防护详情'}</button>
     {/if}
 
     <div class="home-bottom">
@@ -133,7 +156,18 @@
     </div>
   </div>
 {:else}
-  <div class="empty">正在读取本机状态...</div>
+  <div class="empty boot-state" role="status" aria-live="polite">
+    {#if statusError}
+      <strong>无法读取本机状态</strong>
+      <span>{statusError}</span>
+    {:else if connecting}
+      <span class="boot-pulse" aria-hidden="true"></span>
+      <strong>正在连接 Kibana 与 Elasticsearch…</strong>
+      <span>服务未启动或网络不可达时，约 30 秒后会显示具体错误。</span>
+    {:else}
+      正在读取本机状态...
+    {/if}
+  </div>
 {/if}
 
 {#if showAlert && status}
@@ -142,8 +176,8 @@
     <div class="modal" role="dialog" aria-modal="true" aria-label="防护告警" tabindex="-1" on:click|stopPropagation>
       <div class="modal-head">
         <div>
-          <div class="modal-kicker">需要处理</div>
-          <div class="modal-title">{connectionError ? '管理连接失败' : protectionError ? '防护状态无法读取' : level === 'red' ? '防护不可用' : '防护降级'}</div>
+          <div class="modal-kicker">{actionable ? '需要处理' : '当前配置'}</div>
+          <div class="modal-title">{modalTitle}</div>
         </div>
         <button class="btn ghost sm" on:click={dismissAlert}>关闭</button>
       </div>
@@ -154,16 +188,21 @@
           <dt>Defend</dt><dd>{connectionError ? '无法读取' : status.endpointStatus || '无法读取'}</dd>
           <dt>防护模式</dt><dd>{protectionRows.slice(0, 4).map(row => row.unreadable ? '无法读取' : row.mode).join(' / ')}</dd>
         </dl>
+        {#if detectOnly}
+          <p class="connection-note">四项防护均为仅检测模式，只记录威胁，不阻止。需要阻止时，请在 Kibana 的本机策略中调整防护模式。</p>
+        {/if}
         {#if protectionError}<div class="alert-error" role="alert">{protectionError}</div>{/if}
         {#if connectionError}<p class="connection-note">管理连接失败不代表本机防护已关闭，请结合本机 Agent 状态检查。</p>{/if}
         {#if status.agentRuntime?.error}
           <div class="alert-error">{status.agentRuntime.error}</div>
         {/if}
-        <div class="raw-head">
-          <span>elastic-agent status 输出</span>
-          <button class="btn ghost sm" on:click={copyRaw}>复制</button>
-        </div>
-        <pre class="raw">{status.agentRuntime?.raw || status.agentRuntime?.error || '没有读取到详细输出'}</pre>
+        {#if level === 'red'}
+          <div class="raw-head">
+            <span>elastic-agent status 输出</span>
+            <button class="btn ghost sm" on:click={copyRaw}>复制</button>
+          </div>
+          <pre class="raw">{status.agentRuntime?.raw || status.agentRuntime?.error || '没有读取到详细输出'}</pre>
+        {/if}
       </div>
     </div>
   </div>
@@ -185,6 +224,47 @@
 {/if}
 
 <style>
+  .boot-state {
+    height: 100%;
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 32px 24px;
+  }
+
+  .boot-state strong {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-soft);
+  }
+
+  .boot-state span:not(.boot-pulse) {
+    max-width: 440px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted-2);
+  }
+
+  .boot-pulse {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: boot-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes boot-pulse {
+    0%, 100% { opacity: 0.25; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .boot-pulse { animation: none; opacity: 1; }
+  }
+
   .home {
     height: 100%;
     min-height: 0;

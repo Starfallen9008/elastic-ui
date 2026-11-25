@@ -648,6 +648,7 @@ export namespace service {
 	    policyVersion: string;
 	    endpointPolicyVersion: string;
 	    protection: Protection;
+	    detectOnly: boolean;
 	    alerts24h: number;
 	    blocked24h: number;
 	    lastScan?: ScanTask;
@@ -687,6 +688,7 @@ export namespace service {
 	        this.policyVersion = source["policyVersion"];
 	        this.endpointPolicyVersion = source["endpointPolicyVersion"];
 	        this.protection = this.convertValues(source["protection"], Protection);
+	        this.detectOnly = source["detectOnly"];
 	        this.alerts24h = source["alerts24h"];
 	        this.blocked24h = source["blocked24h"];
 	        this.lastScan = this.convertValues(source["lastScan"], ScanTask);

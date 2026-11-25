@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -16,20 +17,21 @@ type fixtureTransport func(*http.Request) (*http.Response, error)
 func (f fixtureTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestVersionsAndSources(t *testing.T) {
-	for _, version := range []string{"v1.0.1", "1.1.0", "2.0.0"} {
+	patch := "v" + bumpVersion(Version, 2)
+	for _, version := range []string{patch, bumpVersion(Version, 1), bumpVersion(Version, 0)} {
 		if !newer(version, Version) {
 			t.Fatalf("rejected newer version %s", version)
 		}
 	}
-	for _, version := range []string{"v1.0.0", "0.9.9", "v1.0.1-beta", "latest", "1.0", "1.-1.0"} {
+	for _, version := range []string{"v" + Version, "0.0.1", "v" + Version + "-beta", "latest", "1.0", "1.-1.0"} {
 		if newer(version, Version) {
 			t.Fatalf("accepted version %s", version)
 		}
 	}
 	for _, address := range []string{
-		"http://github.com/" + Repository + "/releases/download/v1.0.1/setup.exe",
-		"https://github.com/other/repo/releases/download/v1.0.1/setup.exe",
-		"https://github.com.evil.invalid/" + Repository + "/releases/download/v1.0.1/setup.exe",
+		"http://github.com/" + Repository + "/releases/download/" + patch + "/setup.exe",
+		"https://github.com/other/repo/releases/download/" + patch + "/setup.exe",
+		"https://github.com.evil.invalid/" + Repository + "/releases/download/" + patch + "/setup.exe",
 	} {
 		if trustedAsset(address) {
 			t.Fatalf("accepted source %s", address)
@@ -37,17 +39,25 @@ func TestVersionsAndSources(t *testing.T) {
 	}
 }
 
+func bumpVersion(version string, index int) string {
+	parts := strings.Split(version, ".")
+	number, _ := strconv.Atoi(parts[index])
+	parts[index] = strconv.Itoa(number + 1)
+	return strings.Join(parts, ".")
+}
+
 func TestCheckAndDownloadRejectsTampering(t *testing.T) {
 	previous := http.DefaultTransport
 	t.Cleanup(func() { http.DefaultTransport = previous })
 	data := []byte("inert installer fixture")
 	digest := fmt.Sprintf("%x", sha256.Sum256(data))
+	tag := "v" + bumpVersion(Version, 2)
 	tampered := false
 	http.DefaultTransport = fixtureTransport(func(r *http.Request) (*http.Response, error) {
 		body := ""
 		switch {
 		case r.URL.Host == "api.github.com":
-			body = `{"tag_name":"v1.0.1","assets":[{"name":"` + InstallerName + `","size":23,"browser_download_url":"https://github.com/` + Repository + `/releases/download/v1.0.1/` + InstallerName + `"},{"name":"SHA256SUMS","browser_download_url":"https://github.com/` + Repository + `/releases/download/v1.0.1/SHA256SUMS"}]}`
+			body = `{"tag_name":"` + tag + `","assets":[{"name":"` + InstallerName + `","size":23,"browser_download_url":"https://github.com/` + Repository + `/releases/download/` + tag + `/` + InstallerName + `"},{"name":"SHA256SUMS","browser_download_url":"https://github.com/` + Repository + `/releases/download/` + tag + `/SHA256SUMS"}]}`
 		case strings.HasSuffix(r.URL.Path, "SHA256SUMS"):
 			body = digest + "  " + InstallerName
 		default:

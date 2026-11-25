@@ -6,7 +6,7 @@ Elastic Defend 的 Windows 本机控制台。查看当前主机的防护状态�
 
 ## 安装与更新
 
-从 [GitHub Releases](https://github.com/Dreamend1ng/elastic-ui/releases/latest) 下载：
+从 [GitHub Releases](https://github.com/Starfallen9008/elastic-ui/releases/latest) 下载：
 
 - `elastic-ui-windows-amd64-setup.exe`：安装包，提供桌面和开始菜单入口、升级与卸载。
 - `elastic-ui-windows-amd64.exe`：独立程序。

@@ -39,6 +39,9 @@ func NewApp() *App {
 }
 
 func (a *App) startup(ctx context.Context) {
+	if err := shell.SetWindowIcons(shell.WindowClassName); err != nil {
+		logf("set startup window icons: %v", err)
+	}
 	a.mu.Lock()
 	a.ctx = ctx
 	pending := a.pendingScan

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"os"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	winoptions "github.com/wailsapp/wails/v2/pkg/options/windows"
 
 	"elastic-ui/internal/shell"
 	"elastic-ui/internal/tray"
@@ -69,6 +71,9 @@ func main() {
 		}
 	}
 
+	if err := shell.SetApplicationIdentity(); err != nil {
+		logf("set application identity: %v", err)
+	}
 	app := NewApp()
 	for _, arg := range os.Args[1:] {
 		if arg == "--autostart" {
@@ -93,10 +98,16 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: &options.RGBA{R: 17, G: 19, B: 24, A: 1},
 		Frameless:        true,
+		Windows:          &winoptions.Options{WindowClassName: shell.WindowClassName},
 		StartHidden:      app.startHidden,
 		OnStartup:        app.startup,
-		OnBeforeClose:    app.beforeClose,
-		Bind:             []interface{}{app},
+		OnDomReady: func(ctx context.Context) {
+			if err := shell.SetWindowIcons(shell.WindowClassName); err != nil {
+				logf("set window icons: %v", err)
+			}
+		},
+		OnBeforeClose: app.beforeClose,
+		Bind:          []interface{}{app},
 	})
 	if err != nil {
 		logf("wails.Run error: %v", err)

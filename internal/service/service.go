@@ -80,6 +80,7 @@ type StatusView struct {
 	PolicyVersion           string             `json:"policyVersion"`
 	EndpointPolicyVer       string             `json:"endpointPolicyVersion"`
 	Protection              Protection         `json:"protection"`
+	DetectOnly              bool               `json:"detectOnly"`
 	Alerts24h               int64              `json:"alerts24h"`
 	Blocked24h              int64              `json:"blocked24h"`
 	LastScan                *ScanTask          `json:"lastScan,omitempty"`
@@ -671,15 +672,7 @@ func (s *Service) Status() (*StatusView, error) {
 		IsolationActionID:       isolate,
 	}
 	if policy != nil && policyV != nil {
-		p := policyV.Windows
-		view.Protection = Protection{
-			Malware:        modeText(p.Malware.Mode),
-			Ransomware:     modeText(p.Ransomware.Mode),
-			Memory:         modeText(p.MemoryProtection.Mode),
-			Behavior:       modeText(p.BehaviorProtection.Mode),
-			DeviceControl:  deviceControlText(p.DeviceControl.Enabled, p.DeviceControl.USBStorage),
-			AVRegistration: p.AntivirusRegistration.Enabled,
-		}
+		view.Protection, view.DetectOnly = protectionFromPolicy(policyV.Windows)
 	} else {
 		view.ProtectionError = "未读取到本机 Windows 防护策略，无法确认模块状态"
 	}
@@ -1549,6 +1542,20 @@ func localIPSet() map[string]bool {
 		}
 	}
 	return out
+}
+
+func protectionFromPolicy(p kibana.OSProtection) (Protection, bool) {
+	protection := Protection{
+		Malware:        modeText(p.Malware.Mode),
+		Ransomware:     modeText(p.Ransomware.Mode),
+		Memory:         modeText(p.MemoryProtection.Mode),
+		Behavior:       modeText(p.BehaviorProtection.Mode),
+		DeviceControl:  deviceControlText(p.DeviceControl.Enabled, p.DeviceControl.USBStorage),
+		AVRegistration: p.AntivirusRegistration.Enabled,
+	}
+	detectOnly := p.Malware.Mode == "detect" && p.Ransomware.Mode == "detect" &&
+		p.MemoryProtection.Mode == "detect" && p.BehaviorProtection.Mode == "detect"
+	return protection, detectOnly
 }
 
 func modeText(mode string) string {

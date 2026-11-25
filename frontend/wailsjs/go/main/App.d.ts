@@ -92,6 +92,8 @@ export function SetTrayTheme(arg1:boolean):Promise<void>;
 
 export function ShellIntegrationEnabled():Promise<boolean>;
 
+export function ShowWindow():Promise<void>;
+
 export function StartScan(arg1:string):Promise<service.ScanTask>;
 
 export function StartupEnabled():Promise<boolean>;

@@ -13,7 +13,7 @@
   "info": {
     "companyName": "Elastic UI contributors",
     "productName": "Elastic Defend 本机控制台",
-    "productVersion": "1.0.0",
+    "productVersion": "1.0.1",
     "copyright": "Elastic UI contributors",
     "comments": "Local console for Elastic Defend"
   }

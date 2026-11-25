@@ -40,6 +40,25 @@ func TestDisconnectedStatusKeepsErrorAndLocalHealth(t *testing.T) {
 	}
 }
 
+func TestDetectOnlyRequiresAllFourModulesInDetectMode(t *testing.T) {
+	var policy kibana.OSProtection
+	policy.Malware.Mode = "detect"
+	policy.Ransomware.Mode = "detect"
+	policy.MemoryProtection.Mode = "detect"
+	policy.BehaviorProtection.Mode = "detect"
+	if protection, detectOnly := protectionFromPolicy(policy); !detectOnly || protection.Malware != "仅检测" {
+		t.Fatalf("four detect modes not recognized: %+v %v", protection, detectOnly)
+	}
+	policy.BehaviorProtection.Mode = "prevent"
+	if _, detectOnly := protectionFromPolicy(policy); detectOnly {
+		t.Fatal("mixed detect/prevent reported as detect-only")
+	}
+	policy.BehaviorProtection.Mode = ""
+	if _, detectOnly := protectionFromPolicy(policy); detectOnly {
+		t.Fatal("unknown mode reported as detect-only")
+	}
+}
+
 func TestStatusRefreshFailureDoesNotLeaveHealthyRemoteSnapshot(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"message":"fixture unavailable"}`, http.StatusServiceUnavailable)

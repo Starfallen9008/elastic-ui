@@ -7,10 +7,10 @@
 
   const dispatch = createEventDispatcher();
 
-  let kibanaUrl = initial?.kibanaUrl || 'https://kibana.dreamending.com';
-  let esUrl = initial?.esUrl || 'https://es.dreamending.com';
+  let kibanaUrl = initial?.kibanaUrl || '';
+  let esUrl = initial?.esUrl || '';
   let authMethod = initial?.authMethod || 'basic';
-  let username = initial?.username || 'dreamending';
+  let username = initial?.username || '';
   let password = '';
   let apiKey = '';
   let skipTlsVerify = initial?.skipTlsVerify || false;
